@@ -6,7 +6,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,6 +21,7 @@ import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
 import freemarker.template.TemplateExceptionHandler;
+
 
 @SuppressWarnings("serial")
 public class AppServlet extends HttpServlet {
@@ -61,6 +61,23 @@ public class AppServlet extends HttpServlet {
     }
   }
 
+  private String validateAndSanitize(String input, String fieldName) throws IllegalArgumentException {
+    if (input == null || input.isEmpty()) {
+      throw new IllegalArgumentException(fieldName + " cannot be empty.");
+    }
+    if(fieldName.equals("Username")){
+      if (!input.matches("^[a-zA-Z0-9@.]+$")) {
+        throw new IllegalArgumentException(fieldName + " contains invalid characters.");
+      }
+    }
+    if(fieldName.equals("Surname")){
+      if (!input.matches("^[a-zA-Z]+$")) {
+        throw new IllegalArgumentException("Surname contains invalid characters.");
+      }
+    }
+    return input.trim();
+  }
+
   @Override
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
    throws ServletException, IOException {
@@ -79,9 +96,9 @@ public class AppServlet extends HttpServlet {
   protected void doPost(HttpServletRequest request, HttpServletResponse response)
    throws ServletException, IOException {
      // Get form parameters
-    String username = request.getParameter("username");
-    String password = request.getParameter("password");
-    String surname = request.getParameter("surname");
+    String username = validateAndSanitize(request.getParameter("username"), "Username");
+    String password = validateAndSanitize(request.getParameter("password"), "Password");
+    String surname = validateAndSanitize(request.getParameter("surname"), "Surname");
 
     try {
       if (authenticated(username, password)) {
