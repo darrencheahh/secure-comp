@@ -17,13 +17,12 @@ public class HashingPassword {
         try (Connection connection = DriverManager.getConnection(db_connection)) {
             
             // query for username and password
-            String selectQuery = "SELECT username, password FROM user";
+            String selectQuery = "SELECT password FROM user";
             Statement selectStmt = connection.createStatement();
             ResultSet results = selectStmt.executeQuery(selectQuery);
 
             // iterate through each user record
             while (results.next()) {
-                String username = results.getString("username");
                 String plaintextPassword = results.getString("password");
 
                 // hash the password using SHA-256
@@ -33,7 +32,6 @@ public class HashingPassword {
                 String updateQuery = "UPDATE user SET password = ? WHERE username = ?";
                 try (PreparedStatement updateStmt = connection.prepareStatement(updateQuery)) {
                     updateStmt.setString(1, hashedPassword);
-                    updateStmt.setString(2, username);
                     updateStmt.executeUpdate();
                 }
             }
