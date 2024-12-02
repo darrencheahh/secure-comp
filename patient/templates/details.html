@@ -9,7 +9,7 @@
   <body>
     <div class="container">
       <h1 class="mt-2 mb-4">Patient Records System</h1>
-      <#if records?size != 0>
+      <#if records?? && records?size != 0>
       <div class="panel panel-success">
         <div class="panel-heading">Patient Details</div>
         <table class="table table-bordered">
