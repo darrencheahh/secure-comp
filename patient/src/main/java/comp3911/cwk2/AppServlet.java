@@ -16,6 +16,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -61,64 +62,109 @@ public class AppServlet extends HttpServlet {
     }
   }
 
-  private String validateAndSanitize(String input, String fieldName) throws IllegalArgumentException {
+  private String validateAndSanitize(String input, String fieldName) {
     if (input == null || input.isEmpty()) {
-      throw new IllegalArgumentException(fieldName + " cannot be empty.");
+        return null; // Return null for empty input
     }
-    if(fieldName.equals("Username")){
-      if (!input.matches("^[a-zA-Z0-9@.]+$")) {
-        throw new IllegalArgumentException(fieldName + " contains invalid characters.");
-      }
+    if ("Username".equals(fieldName)) {
+        if (!input.matches("^[a-zA-Z0-9@.]+$")) {
+            return null; // Invalid username
+        }
     }
-    if(fieldName.equals("Surname")){
-      if (!input.matches("^[a-zA-Z]+$")) {
-        throw new IllegalArgumentException("Surname contains invalid characters.");
-      }
+    if ("Surname".equals(fieldName)) {
+        if (!input.matches("^[a-zA-Z]+$")) {
+            return null; // Invalid surname
+        }
     }
     return input.trim();
-  }
+}
+
 
   @Override
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
    throws ServletException, IOException {
-    try {
-      Template template = fm.getTemplate("login.html");
-      template.process(null, response.getWriter());
-      response.setContentType("text/html");
-      response.setStatus(HttpServletResponse.SC_OK);
-    }
-    catch (TemplateException error) {
-      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    preventCaching(response);
+
+    String currentURI = request.getRequestURI();
+
+    if (currentURI.equals("/")) {
+        // Invalidate the session to log the user out
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate(); // Logs the user out
+            System.out.println("User logged out successfully.");
+        }
+
+        // Redirect to the login page
+        response.sendRedirect("/login");
+    } else {
+        // Handle the rest of the requests (like the details page)
+        HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("authenticated") == null) {
+            try {
+                Template template = fm.getTemplate("login.html");
+                template.process(null, response.getWriter());
+                response.setContentType("text/html");
+                response.setStatus(HttpServletResponse.SC_OK);
+            } catch (TemplateException error) {
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            }
+        } else {
+            response.sendRedirect("/");
+        }
     }
   }
 
   @Override
   protected void doPost(HttpServletRequest request, HttpServletResponse response)
-   throws ServletException, IOException {
-     // Get form parameters
-    String username = validateAndSanitize(request.getParameter("username"), "Username");
-    String password = validateAndSanitize(request.getParameter("password"), "Password");
-    String surname = validateAndSanitize(request.getParameter("surname"), "Surname");
+          throws ServletException, IOException {
 
-    try {
-      if (authenticated(username, password)) {
-        // Get search results and merge with template
-        Map<String, Object> model = new HashMap<>();
-        model.put("records", searchResults(surname));
-        Template template = fm.getTemplate("details.html");
-        template.process(model, response.getWriter());
+      preventCaching(response);
+
+      try {
+          // Get form parameters
+          String username = validateAndSanitize(request.getParameter("username"), "Username");
+          String password = validateAndSanitize(request.getParameter("password"), "Password");
+          String surname = validateAndSanitize(request.getParameter("surname"), "Surname");
+
+          // Check for invalid or empty inputs
+          if (username == null || password == null) {
+              // Redirect to the invalid page if username or password is invalid or empty
+              Template template = fm.getTemplate("invalid.html");
+              template.process(null, response.getWriter());
+              response.setContentType("text/html");
+              response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+              return;
+          }
+
+          if (authenticated(username, password)) {
+              HttpSession session = request.getSession();
+              session.setAttribute("authenticated", true);
+
+              // Get search results and merge with template
+              Map<String, Object> model = new HashMap<>();
+              if (surname != null && !surname.isEmpty()) {
+                  List<Record> records = searchResults(surname);
+                  model.put("records", records);
+              }
+
+              Template template = fm.getTemplate("details.html");
+              template.process(model, response.getWriter());
+              response.setContentType("text/html");
+              response.setStatus(HttpServletResponse.SC_OK);
+          } else {
+              Template template = fm.getTemplate("invalid.html");
+              template.process(null, response.getWriter());
+              response.setContentType("text/html");
+              response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+          }
+
+      } catch (Exception error) {
+          error.printStackTrace();
+          response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
       }
-      else {
-        Template template = fm.getTemplate("invalid.html");
-        template.process(null, response.getWriter());
-      }
-      response.setContentType("text/html");
-      response.setStatus(HttpServletResponse.SC_OK);
-    }
-    catch (Exception error) {
-      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-    }
   }
+
 
   private boolean authenticated(String username, String password) throws SQLException {
     try (PreparedStatement pstmt = database.prepareStatement(AUTH_QUERY)) {
@@ -148,5 +194,11 @@ public class AppServlet extends HttpServlet {
       }
     }
     return records;
+  }
+
+  private void preventCaching(HttpServletResponse response) {
+    response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+    response.setHeader("Pragma", "no-cache");
+    response.setDateHeader("Expires", 0);
   }
 }
