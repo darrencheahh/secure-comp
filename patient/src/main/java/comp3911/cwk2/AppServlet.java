@@ -116,14 +116,6 @@ public class AppServlet extends HttpServlet {
     try {
       HttpSession session = request.getSession();
 
-      // Generate a CSRF token
-      String csrfToken = generateCSRFToken();
-      session.setAttribute("csrfToken", csrfToken);
-
-      // Pass CSRF token to the template
-      Map<String, Object> model = new HashMap<>();
-      model.put("csrfToken", csrfToken);
-
       Template template = fm.getTemplate("login.html");
       template.process(null, response.getWriter());
       response.setContentType("text/html");
@@ -184,15 +176,6 @@ public class AppServlet extends HttpServlet {
           response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 
     try {
-      // Validate CSRF token
-      HttpSession session = request.getSession();
-      String sessionToken = (String) session.getAttribute("csrfToken");
-      String requestToken = request.getParameter("csrfToken");
-
-      if (sessionToken == null || !sessionToken.equals(requestToken)) {
-        response.sendError(HttpServletResponse.SC_FORBIDDEN, "Invalid CSRF token");
-        return;
-      }
 
       if (authenticated(username, password)) {
         // Get search results and merge with template
@@ -203,7 +186,6 @@ public class AppServlet extends HttpServlet {
 
       }
   }
-
 
   private boolean authenticated(String username, String password) throws SQLException {
     try (PreparedStatement pstmt = database.prepareStatement(AUTH_QUERY)) {
