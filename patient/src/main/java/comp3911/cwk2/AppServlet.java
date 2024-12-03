@@ -112,6 +112,16 @@ public class AppServlet extends HttpServlet {
     String surname = validateAndSanitize(request.getParameter("surname"), "Surname");
 
     try {
+      // Validate CSRF token
+      HttpSession session = request.getSession();
+      String sessionToken = (String) session.getAttribute("csrfToken");
+      String requestToken = request.getParameter("csrfToken");
+
+      if (sessionToken == null || !sessionToken.equals(requestToken)) {
+        response.sendError(HttpServletResponse.SC_FORBIDDEN, "Invalid CSRF token");
+        return;
+      }
+
       if (authenticated(username, password)) {
         // Get search results and merge with template
         Map<String, Object> model = new HashMap<>();
@@ -159,5 +169,8 @@ public class AppServlet extends HttpServlet {
       }
     }
     return records;
+  }
+  private String generateCSRFToken() {
+    return java.util.UUID.randomUUID().toString();
   }
 }
