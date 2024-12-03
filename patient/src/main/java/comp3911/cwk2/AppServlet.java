@@ -193,6 +193,7 @@ public class AppServlet extends HttpServlet {
           String username = validateAndSanitize(request.getParameter("username"), "Username");
           String password = validateAndSanitize(request.getParameter("password"), "Password");
           String surname = validateAndSanitize(request.getParameter("surname"), "Surname");
+          System.out.println("Received surname: " + surname);
 
           // Check for invalid or empty inputs
           if (username == null || password == null) {
