@@ -2,16 +2,21 @@ package comp3911.cwk2;
 
 import java.io.File;
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
+import java.sql.Statement; //no need later
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -28,8 +33,12 @@ import freemarker.template.TemplateExceptionHandler;
 public class AppServlet extends HttpServlet {
 
   private static final String CONNECTION_URL = "jdbc:sqlite:db.sqlite3";
-  private static final String AUTH_QUERY = "select * from user where username=? and password=?";
+  private static final String AUTH_QUERY = "SELECT salt, hash FROM user WHERE username=?";
+  //private static final String AUTH_QUERY = "select * from user where username=? and password=?";
   private static final String SEARCH_QUERY = "select * from patient where surname=? collate nocase";
+  private static final int ITERATIONS = 65536;
+  private static final int KEY_LENGTH = 128;
+  private static final int SALT_LENGTH = 16;
 
   private final Configuration fm = new Configuration(Configuration.VERSION_2_3_28);
   private Connection database;
@@ -38,6 +47,62 @@ public class AppServlet extends HttpServlet {
   public void init() throws ServletException {
     configureTemplateEngine();
     connectToDatabase();
+
+//    migratePasswords();
+  }
+
+  private void migratePasswords() {
+    System.out.println("Starting password migration...");
+    try (Statement stmt = database.createStatement();
+         ResultSet rs = stmt.executeQuery("SELECT id, password FROM user")) {
+
+        while (rs.next()) {
+            int userId = rs.getInt("id");
+            String plainPassword = rs.getString("password");
+
+            // Skip null or empty passwords
+            if (plainPassword == null || plainPassword.isEmpty()) {
+                System.out.println("Skipping user with ID " + userId + " due to empty password.");
+                continue;
+            }
+
+            // Generate hash and salt
+            String[] saltAndHash = generateHashAndSalt(plainPassword);
+            String salt = saltAndHash[0];
+            String hash = saltAndHash[1];
+
+            // Update the database
+            try (PreparedStatement pstmt = database.prepareStatement("UPDATE user SET salt = ?, hash = ?, password = NULL WHERE id = ?")) {
+                pstmt.setString(1, salt);
+                pstmt.setString(2, hash);
+                pstmt.setInt(3, userId);
+                pstmt.executeUpdate();
+            }
+            System.out.println("Migrated user with ID " + userId);
+        }
+
+        System.out.println("Password migration complete!");
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+  }
+
+  private String[] generateHashAndSalt(String password) throws Exception {
+    // Generate random salt
+    byte[] salt = new byte[SALT_LENGTH];
+    SecureRandom random = new SecureRandom();
+    random.nextBytes(salt);
+
+    // Generate hash using PBKDF2
+    PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
+    SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+    byte[] hash = factory.generateSecret(spec).getEncoded();
+
+    // Encode salt and hash in Base64 for storage
+    String saltBase64 = Base64.getEncoder().encodeToString(salt);
+    String hashBase64 = Base64.getEncoder().encodeToString(hash);
+
+    return new String[]{saltBase64, hashBase64};
   }
 
   private void configureTemplateEngine() throws ServletException {
@@ -169,14 +234,39 @@ public class AppServlet extends HttpServlet {
   private boolean authenticated(String username, String password) throws SQLException {
     try (PreparedStatement pstmt = database.prepareStatement(AUTH_QUERY)) {
       pstmt.setString(1, username);
-      pstmt.setString(2, password);
-      try(ResultSet results = pstmt.executeQuery()){
-        return results.next();
-      }
-    }
-  }
+      //pstmt.setString(2, password);
+        try (ResultSet rs = pstmt.executeQuery()) {
+            if (rs.next()) {
+                String storedSalt = rs.getString("salt");
+                String storedHash = rs.getString("hash");
 
-  private List<Record> searchResults(String surname) throws SQLException {
+                // Verify the password
+                return verifyPassword(password, storedSalt, storedHash);
+            }
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+      return false;
+    }
+
+private boolean verifyPassword(String password, String storedSalt, String storedHash) throws Exception {
+    // Decode the stored salt
+    byte[] salt = Base64.getDecoder().decode(storedSalt);
+
+    // Generate the hash for the provided password
+    PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
+    SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+    byte[] hash = factory.generateSecret(spec).getEncoded();
+
+    // Encode the generated hash in Base64
+    String hashBase64 = Base64.getEncoder().encodeToString(hash);
+
+    // Compare the generated hash with the stored hash
+    return hashBase64.equals(storedHash);
+}
+
+private List<Record> searchResults(String surname) throws SQLException {
     List<Record> records = new ArrayList<>();
     try (PreparedStatement pstmt = database.prepareStatement(SEARCH_QUERY)) {
       pstmt.setString(1, surname);

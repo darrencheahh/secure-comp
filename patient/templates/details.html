@@ -22,7 +22,7 @@
           </tr>
           <#list records as record>
           <tr>
-            <td>${record.surname}</td>
+            <td>${record.surname?html}</td>
             <td>${record.forename}</td>
             <td>${record.dateOfBirth}</td>
             <td>${record.doctorId}</td>
