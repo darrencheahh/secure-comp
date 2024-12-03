@@ -16,6 +16,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -82,6 +83,16 @@ public class AppServlet extends HttpServlet {
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
    throws ServletException, IOException {
     try {
+      HttpSession session = request.getSession();
+
+      // Generate a CSRF token
+      String csrfToken = generateCSRFToken();
+      session.setAttribute("csrfToken", csrfToken);
+
+      // Pass CSRF token to the template
+      Map<String, Object> model = new HashMap<>();
+      model.put("csrfToken", csrfToken);
+
       Template template = fm.getTemplate("login.html");
       template.process(null, response.getWriter());
       response.setContentType("text/html");
