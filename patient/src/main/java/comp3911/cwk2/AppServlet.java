@@ -8,7 +8,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
-import java.sql.Statement; //no need later
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +34,6 @@ public class AppServlet extends HttpServlet {
 
   private static final String CONNECTION_URL = "jdbc:sqlite:db.sqlite3";
   private static final String AUTH_QUERY = "SELECT salt, hash FROM user WHERE username=?";
-  //private static final String AUTH_QUERY = "select * from user where username=? and password=?";
   private static final String SEARCH_QUERY = "select * from patient where surname=? collate nocase";
   private static final int ITERATIONS = 65536;
   private static final int KEY_LENGTH = 128;
@@ -48,7 +47,7 @@ public class AppServlet extends HttpServlet {
     configureTemplateEngine();
     connectToDatabase();
 
-//    migratePasswords();
+//  migratePasswords();  // only uncomment if you want to migrate passwords to hash
   }
 
   private void migratePasswords() {
@@ -80,7 +79,6 @@ public class AppServlet extends HttpServlet {
             }
             System.out.println("Migrated user with ID " + userId);
         }
-
         System.out.println("Password migration complete!");
     } catch (Exception e) {
         e.printStackTrace();
@@ -234,8 +232,7 @@ public class AppServlet extends HttpServlet {
   private boolean authenticated(String username, String password) throws SQLException {
     try (PreparedStatement pstmt = database.prepareStatement(AUTH_QUERY)) {
       pstmt.setString(1, username);
-      //pstmt.setString(2, password);
-        try (ResultSet rs = pstmt.executeQuery()) {
+      try (ResultSet rs = pstmt.executeQuery()) {
             if (rs.next()) {
                 String storedSalt = rs.getString("salt");
                 String storedHash = rs.getString("hash");
@@ -243,7 +240,7 @@ public class AppServlet extends HttpServlet {
                 // Verify the password
                 return verifyPassword(password, storedSalt, storedHash);
             }
-        }
+      }
     } catch (Exception e) {
         e.printStackTrace();
     }
